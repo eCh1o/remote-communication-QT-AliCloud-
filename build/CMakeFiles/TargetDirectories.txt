@@ -1,5 +1,0 @@
-/home/echio/RC/remote-communication-QT-AliCloud-/build/CMakeFiles/edit_cache.dir
-/home/echio/RC/remote-communication-QT-AliCloud-/build/CMakeFiles/rebuild_cache.dir
-/home/echio/RC/remote-communication-QT-AliCloud-/build/src/CMakeFiles/RCS.dir
-/home/echio/RC/remote-communication-QT-AliCloud-/build/src/CMakeFiles/edit_cache.dir
-/home/echio/RC/remote-communication-QT-AliCloud-/build/src/CMakeFiles/rebuild_cache.dir

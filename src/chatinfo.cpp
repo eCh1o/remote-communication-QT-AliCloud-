@@ -16,9 +16,10 @@ ChatInfo::ChatInfo()
         Group g;
         g.name = group_name[i];
         g.l = new list<GroupUser>; //保存群中所有用户
-        string member;             //保存群里所有用户
+        group_info->push_back(g);
+        string member;
         MyDB->getGroupMember(group_name[i], member);
-        cout << member << endl;
+        // cout << member << endl;
         int start = 0, end = 0;
         GroupUser user;
         while (1)
@@ -35,17 +36,60 @@ ChatInfo::ChatInfo()
         }
         user.name = member.substr(start, member.length() - start);
         g.l->push_back(user);
-        group_info->push_back(g);
+        
     }
-    for (list<Group>::iterator it = group_info->begin(); it != group_info->end(); it++)
-    {
-        cout << "群名字: " << it->name << endl;
-        for (list<GroupUser>::iterator i = it->l->begin(); i != it->l->end(); i++)
-        {
-            cout << i->name << endl;
-        }
-    }
+    // for (list<Group>::iterator it = group_info->begin(); it != group_info->end(); it++)
+    // {
+    //     cout << "群名字: " << it->name << endl;
+    //     for (list<GroupUser>::iterator i = it->l->begin(); i != it->l->end(); i++)
+    //     {
+    //         cout << i->name << endl;
+    //     }
+    // }
+    MyDB->disconnect();
 }
 ChatInfo::~ChatInfo()
 {
+}
+bool ChatInfo::info_group_exist(string group_name)
+{
+    for (list<Group>::iterator it = group_info->begin(); it != group_info->end(); it++)
+    {
+        if (it->name == group_name)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ChatInfo::info_isInGroup(string group_name, string user_name)
+{
+    for (list<Group>::iterator it = group_info->begin(); it != group_info->end(); it++)
+    {
+        if (it->name == group_name)
+        {
+            for (list<GroupUser>::iterator i = it->l->begin(); i != it->l->end(); i++)
+            {
+                if (i->name == user_name)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+void ChatInfo::info_GroupAddUser(string group_name, string user_name)
+{
+    for (list<Group>::iterator it = group_info->begin(); it != group_info->end(); it++)
+    {
+        if (it->name == group_name)
+        {
+            GroupUser u;
+            u.name = user_name;
+            it->l->push_back(u);
+        }
+    }
 }

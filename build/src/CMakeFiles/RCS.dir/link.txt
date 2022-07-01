@@ -1,1 +1,0 @@
-/usr/bin/c++ -g -rdynamic CMakeFiles/RCS.dir/chatinfo.cpp.o CMakeFiles/RCS.dir/db.cpp.o CMakeFiles/RCS.dir/main.cpp.o CMakeFiles/RCS.dir/server.cpp.o -o ../../bin/RCS  -levent -lmysqlclient -lpthread 

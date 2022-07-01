@@ -31,6 +31,8 @@ typedef struct Group Group;
 
 class ChatInfo
 {
+    friend class Server;
+
 private:
     list<User> *online_user; //保存所有在线用户信息
     list<Group> *group_info; //保存所有群的信息
@@ -39,6 +41,9 @@ private:
 public:
     ChatInfo();
     ~ChatInfo();
+    bool info_group_exist(string);
+    bool info_isInGroup(string, string);
+    void info_GroupAddUser(string, string);
 };
 
 #endif
