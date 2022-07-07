@@ -249,7 +249,7 @@ void DataBase::createGroup(string group_name, string owner)
         cout << "mysql_query error" << endl;
     }
     memset(sql, 0, sizeof(sql));
-    sprintf(sql, "insert into %s (owner) values ('%s','%s');", group_name.c_str(), owner.c_str(),owner.c_str());
+    sprintf(sql, "insert into %s (owner) values ('%s','%s');", group_name.c_str(), owner.c_str(), owner.c_str());
     if (mysql_query(mysql, sql) != 0)
     {
         cout << "mysql_querry error" << endl;

@@ -19,7 +19,6 @@ ChatInfo::ChatInfo()
         group_info->push_back(g);
         string member;
         MyDB->getGroupMember(group_name[i], member);
-        // cout << member << endl;
         int start = 0, end = 0;
         GroupUser user;
         while (1)
@@ -36,7 +35,6 @@ ChatInfo::ChatInfo()
         }
         user.name = member.substr(start, member.length() - start);
         g.l->push_back(user);
-        
     }
     // for (list<Group>::iterator it = group_info->begin(); it != group_info->end(); it++)
     // {
@@ -92,4 +90,33 @@ void ChatInfo::info_GroupAddUser(string group_name, string user_name)
             it->l->push_back(u);
         }
     }
+}
+
+bufferevent *ChatInfo::info_get_friend_bev(string name)
+{
+    for (list<User>::iterator it = online_user->begin(); it != online_user->end(); it++)
+    {
+        if (it->name == name)
+        {
+            return it->bev;
+        }
+    }
+    return NULL;
+}
+
+string ChatInfo::info_get_group_member(string group_name)
+{
+    string member;
+    for (list<Group>::iterator it = group_info->begin(); it != group_info->end(); it++)
+    {
+        if (group_name == it->name)
+        {
+            for (list<GroupUser>::iterator i = it->l->begin(); i != it->l->end(); i++)
+            {
+                member += i->name;
+                member += "|";
+            }
+        }
+    }
+    return member;
 }

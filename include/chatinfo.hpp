@@ -44,6 +44,8 @@ public:
     bool info_group_exist(string);
     bool info_isInGroup(string, string);
     void info_GroupAddUser(string, string);
+    bufferevent *info_get_friend_bev(string);
+    string info_get_group_member(string);
 };
 
 #endif

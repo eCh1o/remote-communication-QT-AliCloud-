@@ -9,7 +9,6 @@ Server::Server(const char *ip, int port)
     //创建事件集合
     cout << "ip:" << ip << "  port:" << port << endl;
     base = event_base_new();
-
     sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
@@ -59,6 +58,7 @@ void Server::client_handler(int fd)
     //使能回调函数
     bufferevent_enable(bev, EV_READ);
     event_base_dispatch(base); //监听集合（监听客户端是否有数据发送过来）
+    // event_base_free(base);
 }
 
 //读事件回调函数
@@ -98,6 +98,26 @@ void Server::read_cb(bufferevent *bev, void *ctx)
     else if (cmd == "add_group")
     {
         server_add_group(bev, val);
+    }
+    else if (cmd == "private_chat")
+    {
+        server_private_chat(bev, val);
+    }
+    else if (cmd == "group_chat")
+    {
+        server_group_chat(bev, val);
+    }
+    else if (cmd == "get_group_member")
+    {
+        server_get_group_member(bev, val);
+    }
+    else if (cmd == "offline")
+    {
+        server_user_offline(bev, val);
+    }
+    else if (cmd == "send_file")
+    {
+        server_send_file(bev, val);
     }
 }
 
@@ -205,7 +225,7 @@ void Server::server_login(bufferevent *bev, Json::Value val)
                 valu["cmd"] = "friend_login";
                 valu["friend"] = val["user"].asString().c_str();
                 string s = Json::FastWriter().write(valu);
-                if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+                if (bufferevent_write(it->bev, s.c_str(), strlen(s.c_str())) < 0)
                 {
                     cout << "bufferevent_write error" << endl;
                 }
@@ -222,7 +242,7 @@ void Server::server_login(bufferevent *bev, Json::Value val)
             valu["cmd"] = "friend_login";
             valu["friend"] = val["user"].asString().c_str();
             string s = Json::FastWriter().write(valu);
-            if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+            if (bufferevent_write(it->bev, s.c_str(), strlen(s.c_str())) < 0)
             {
                 cout << "bufferevent_write error" << endl;
             }
@@ -365,4 +385,165 @@ void Server::server_add_group(bufferevent *bev, Json::Value val)
     {
         cout << "bufferevent_write error" << endl;
     }
+}
+
+void Server::server_private_chat(bufferevent *bev, Json::Value val)
+{
+    bufferevent *to_bev = chatlist->info_get_friend_bev(val["user_to"].asString());
+    if (NULL == to_bev)
+    {
+        Json::Value valu;
+        valu["cmd"] = "private_chat_reply";
+        valu["result"] = "offline";
+        string s = Json::FastWriter().write(valu);
+        if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+        {
+            cout << "bufferevent_write error" << endl;
+        }
+        return;
+    }
+    string s = Json::FastWriter().write(val);
+    if (bufferevent_write(to_bev, s.c_str(), strlen(s.c_str())) < 0)
+    {
+        cout << "bufferevent_write error" << endl;
+    }
+    Json::Value valu;
+    valu["cmd"] = "private_chat_reply";
+    valu["result"] = "success";
+    s = Json::FastWriter().write(valu);
+    if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+    {
+        cout << "bufferevent_write error" << endl;
+    }
+}
+
+void Server::server_group_chat(bufferevent *bev, Json::Value val)
+{
+    for (list<Group>::iterator it = chatlist->group_info->begin(); it != chatlist->group_info->end(); it++)
+    {
+        if (val["group"].asString() == it->name)
+        {
+            for (list<GroupUser>::iterator i = it->l->begin(); i != it->l->end(); i++)
+            {
+                bufferevent *to_bev = chatlist->info_get_friend_bev(i->name);
+                if (to_bev != NULL)
+                {
+                    string s = Json::FastWriter().write(val);
+                    if (bufferevent_write(to_bev, s.c_str(), strlen(s.c_str())) < 0)
+                    {
+                        cout << "bufferevent_write error" << endl;
+                    }
+                }
+            }
+        }
+    }
+    Json::Value valu;
+    valu["cmd"] = "group_chat_reply";
+    valu["result"] = "success";
+    string s = Json::FastWriter().write(valu);
+    if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+    {
+        cout << "bufferevent_write error" << endl;
+    }
+}
+
+void Server::server_get_group_member(bufferevent *bev, Json::Value val)
+{
+    string member = chatlist->info_get_group_member(val["group"].asString());
+    Json::Value valu;
+    valu["cmd"] = "get_group_member_reply";
+    valu["member"] = member;
+    string s = Json::FastWriter().write(valu);
+    if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+    {
+        cout << "bufferevent_write error" << endl;
+    }
+}
+
+void Server::server_user_offline(bufferevent *bev, Json::Value val)
+{
+
+    //从链表中删除用户
+    for (list<User>::iterator it = chatlist->online_user->begin(); it != chatlist->online_user->end(); it++)
+    {
+        if (it->name == val["user"].asString())
+        {
+            chatlist->online_user->erase(it);
+            break;
+        }
+    }
+    chatdb->db_connect("user");
+    //获取好友和群列表并返回
+    string friend_list, group_list;
+    string name, s;
+    Json::Value valu;
+    chatdb->getUserInfo(val["user"].asString(), friend_list, group_list);
+    //向好友发送上线提醒
+    int start = 0, end = 0, flag = 1;
+    while (flag)
+    {
+        end = friend_list.find('|', start);
+        if (-1 == end)
+        {
+            name = friend_list.substr(start, friend_list.length() - start);
+            flag = 0;
+        }
+        else
+        {
+            name = friend_list.substr(start, end - start);
+        }
+        //好友下线提醒
+        for (list<User>::iterator it = chatlist->online_user->begin(); it != chatlist->online_user->end(); it++)
+        {
+            if (name == it->name)
+            {
+                valu.clear();
+                valu["cmd"] = "friend_offline";
+                valu["friend"] = val["user"];
+                s = Json::FastWriter().write(valu);
+                if (bufferevent_write(it->bev, s.c_str(), strlen(s.c_str())) < 0)
+                {
+                    cout << "bufferevent_write error" << endl;
+                }
+            }
+        }
+        start = end + 1;
+    }
+    chatdb->disconnect();
+}
+
+void Server::send_file_handler(int length, int port, int *f_fd, int *t_fd)
+{
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (-1 == sockfd)
+    {
+        return;
+    }
+    sockaddr_in server_addr, client_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+}
+// 发送文件
+void Server::server_send_file(bufferevent *bev, Json::Value val)
+{
+    Json::Value valu;
+    string s;
+    bufferevent *to_bev = chatlist->info_get_friend_bev(val["to_user"].asString());
+    if (to_bev == NULL)
+    {
+        valu["cmd"] = "send_file_reply";
+        valu["result"] = "offline";
+        s = Json::FastWriter().write(valu);
+        if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+        {
+            cout << "bufferevent_write error" << endl;
+        }
+        return;
+    }
+    //启动新线程，创建文件传输服务器
+    int port = 8080, from_fd = 0, to_fd = 0;
+    thread send_file_thread(send_file_handler, val["length"].asInt(), port, &from_fd, &to_fd);
+    send_file_thread.detach();
 }
