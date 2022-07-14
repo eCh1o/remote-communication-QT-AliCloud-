@@ -12,6 +12,7 @@ Server::Server(const char *ip, int port)
     sockaddr_in server_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
+    // server_addr.sin_port = port;
     server_addr.sin_port = htons(port); //如果服务端部署到云服务器需要转换网络字节序
     server_addr.sin_addr.s_addr = inet_addr(ip);
     //创建监听对象
@@ -286,6 +287,7 @@ void Server::server_add(bufferevent *bev, Json::Value val)
     Json::Value valu;
     valu["cmd"] = "add_reply";
     valu["result"] = "success";
+    valu["friend"] = val["friend"];
     string s = Json::FastWriter().write(valu);
     if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
     {
@@ -300,7 +302,7 @@ void Server::server_add(bufferevent *bev, Json::Value val)
             valu["cmd"] = "add_friend_reply";
             valu["result"] = val["user"];
             string s = Json::FastWriter().write(valu);
-            if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+            if (bufferevent_write(it->bev, s.c_str(), strlen(s.c_str())) < 0)
             {
                 cout << "bufferevent_write error" << endl;
             }
@@ -327,9 +329,16 @@ void Server::sever_create_group(bufferevent *bev, Json::Value val)
     }
     //把群信息写入数据库
     chatdb->createGroup(val["group"].asString(), val["user"].asString());
+    chatdb->disconnect();
+    //修改数据库个人信息
+    chatdb->db_connect("user");
+    chatdb->userAddGroup(val["user"].asString(), val["group"].asString());
+    //修改群链表
+    chatlist->info_add_new_group(val["group"].asString(), val["user"].asString());
     Json::Value valu;
     valu["cmd"] = "create_group_reply";
     valu["result"] = "success";
+    valu["group"] = val["group"];
     string s = Json::FastWriter().write(valu);
     if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
     {
@@ -380,6 +389,7 @@ void Server::server_add_group(bufferevent *bev, Json::Value val)
     Json::Value valu;
     valu["cmd"] = "add_group_reply";
     valu["result"] = "success";
+    valu["group"] = val["group"];
     string s = Json::FastWriter().write(valu);
     if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
     {
@@ -453,6 +463,7 @@ void Server::server_get_group_member(bufferevent *bev, Json::Value val)
     Json::Value valu;
     valu["cmd"] = "get_group_member_reply";
     valu["member"] = member;
+    valu["group"] = val["group"];
     string s = Json::FastWriter().write(valu);
     if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
     {
@@ -478,7 +489,7 @@ void Server::server_user_offline(bufferevent *bev, Json::Value val)
     string name, s;
     Json::Value valu;
     chatdb->getUserInfo(val["user"].asString(), friend_list, group_list);
-    //向好友发送上线提醒
+    //向好友发送下线提醒
     int start = 0, end = 0, flag = 1;
     while (flag)
     {
@@ -519,11 +530,47 @@ void Server::send_file_handler(int length, int port, int *f_fd, int *t_fd)
     {
         return;
     }
+    int opt = 1;
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    //接收缓冲区
+    int nRecvBuf = MAXSIZE;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (const char *)&nRecvBuf, sizeof(int));
+    //发送缓冲区
+    int nSendBuf = MAXSIZE;
+    setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, (const char *)&nSendBuf, sizeof(int));
+
     sockaddr_in server_addr, client_addr;
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
-    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server_addr.sin_addr.s_addr = inet_addr("192.168.229.129");
+    bind(sockfd, (sockaddr *)&server_addr, sizeof(server_addr));
+    listen(sockfd, 10);
+    int len = sizeof(client_addr);
+    //接受发送客户端的连接请求
+    *f_fd = accept(sockfd, (sockaddr *)&client_addr, (socklen_t *)&len);
+    // 接受接受客户端的连接请求
+    *t_fd = accept(sockfd, (sockaddr *)&client_addr, (socklen_t *)&len);
+    char buf[MAXSIZE] = {0};
+    size_t size, sum = 0;
+    while (1)
+    {
+        size = recv(*f_fd, buf, MAXSIZE, 0);
+        if(size <=0 || size > MAXSIZE)
+        {
+            break;
+        }
+        sum += size;
+        send(*t_fd, buf, size, 0);
+        if (sum >= length)
+        {
+            break;
+        }
+        memset(buf, 0, MAXSIZE);
+    }
+    close(*f_fd);
+    close(*t_fd);
+    close(sockfd);
 }
 // 发送文件
 void Server::server_send_file(bufferevent *bev, Json::Value val)
@@ -546,4 +593,68 @@ void Server::server_send_file(bufferevent *bev, Json::Value val)
     int port = 8080, from_fd = 0, to_fd = 0;
     thread send_file_thread(send_file_handler, val["length"].asInt(), port, &from_fd, &to_fd);
     send_file_thread.detach();
+    valu.clear();
+    valu["cmd"] = "send_file_port_reply";
+    valu["port"] = port;
+    valu["filename"] = val["filename"];
+    valu["length"] = val["length"];
+    s = Json::FastWriter().write(valu);
+    // if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+    if (send(bev->ev_read.ev_fd, s.c_str(), strlen(s.c_str()), 0) < 0)
+    {
+        cout << "bufferevent_write error" << endl;
+    }
+    int count = 0;
+    while (from_fd <= 0)
+    {
+        cout << count << endl;
+        count++;
+        usleep(100000);
+        if (count == 100)
+        {
+            pthread_cancel(send_file_thread.native_handle());
+            valu.clear();
+            valu["cmd"] = "send_file_reply";
+            valu["result"] = "timeout";
+            s = Json::FastWriter().write(valu);
+            if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+            {
+                cout << "bufferevent_write error" << endl;
+            }
+            return;
+        }
+    }
+
+    //把端口号给接收客户端
+    valu.clear();
+    valu["cmd"] = "recv_file_port_reply";
+    valu["port"] = port;
+    valu["filename"] = val["filename"];
+    valu["length"] = val["length"];
+    s = Json::FastWriter().write(valu);
+    // if (bufferevent_write(to_bev, s.c_str(), strlen(s.c_str())) < 0)
+    if (send(to_bev->ev_read.ev_fd, s.c_str(), strlen(s.c_str()), 0) < 0)
+    {
+        cout << "bufferevent_write error" << endl;
+    }
+    count = 0;
+    while (to_fd <= 0)
+    {
+        cout << "!" << count << endl;
+        count++;
+        usleep(100000);
+        if (count == 100)
+        {
+            pthread_cancel(send_file_thread.native_handle());
+            valu.clear();
+            valu["cmd"] = "send_file_reply";
+            valu["result"] = "timeout";
+            s = Json::FastWriter().write(valu);
+            if (bufferevent_write(bev, s.c_str(), strlen(s.c_str())) < 0)
+            {
+                cout << "bufferevent_write error" << endl;
+            }
+            return;
+        }
+    }
 }

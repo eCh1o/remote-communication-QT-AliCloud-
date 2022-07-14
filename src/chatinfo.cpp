@@ -120,3 +120,16 @@ string ChatInfo::info_get_group_member(string group_name)
     }
     return member;
 }
+
+void ChatInfo::info_add_new_group(string group_name , string user_name)
+{
+    Group G;
+    G.name = group_name;
+    G.l = new list<GroupUser>;
+
+    group_info->push_back(G);
+
+    GroupUser u;
+    u.name = user_name;
+    G.l->push_back(u);
+}

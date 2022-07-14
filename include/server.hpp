@@ -10,6 +10,9 @@
 #include <arpa/inet.h>
 #include <thread>
 #include <jsoncpp/json/json.h>
+#include <unistd.h>
+
+#define MAXSIZE 1024 * 1024
 //服务器类
 class Server
 {

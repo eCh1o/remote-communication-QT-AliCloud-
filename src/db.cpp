@@ -242,6 +242,8 @@ bool DataBase::isGroupExist(string group_name)
 
 void DataBase::createGroup(string group_name, string owner)
 {
+    cout << group_name << endl
+         << owner << endl;
     char sql[128] = {0};
     sprintf(sql, "create table %s (owner varchar(32), member varchar(4096));", group_name.c_str());
     if (mysql_query(mysql, sql) != 0)
@@ -249,7 +251,7 @@ void DataBase::createGroup(string group_name, string owner)
         cout << "mysql_query error" << endl;
     }
     memset(sql, 0, sizeof(sql));
-    sprintf(sql, "insert into %s (owner) values ('%s','%s');", group_name.c_str(), owner.c_str(), owner.c_str());
+    sprintf(sql, "insert into %s (owner,member) values ('%s','%s');", group_name.c_str(), owner.c_str(), owner.c_str());
     if (mysql_query(mysql, sql) != 0)
     {
         cout << "mysql_querry error" << endl;
